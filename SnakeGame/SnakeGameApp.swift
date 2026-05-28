@@ -4,7 +4,10 @@ import SwiftUI
 struct SnakeGameApp: App {
 var body: some Scene {
     WindowGroup {
-        ContentView()
+        RaceView()
+            .ignoresSafeArea()
+            .statusBarHidden(true)
+            .preferredColorScheme(.dark)
     }
 }
 }
