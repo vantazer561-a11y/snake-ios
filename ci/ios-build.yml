@@ -1,0 +1,50 @@
+name: iOS Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build SnakeGame (SwiftPM, iOS Simulator)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+
+      - name: Versions
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Generate Package.swift wrapper
+        run: |
+          cat > Package.swift <<'EOF'
+          // swift-tools-version:5.9
+          import PackageDescription
+          let package = Package(
+              name: "SnakeGame",
+              platforms: [.iOS(.v15)],
+              products: [.library(name: "SnakeGame", targets: ["SnakeGame"])],
+              targets: [.target(name: "SnakeGame", path: "SnakeGame")]
+          )
+          EOF
+
+      - name: Build for iOS Simulator
+        run: |
+          set -o pipefail
+          xcodebuild -scheme SnakeGame -destination 'generic/platform=iOS Simulator' -derivedDataPath build build
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: build/Logs
+          if-no-files-found: ignore
