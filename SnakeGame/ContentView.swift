@@ -1,13 +1,9 @@
 import SwiftUI
 
+// Legacy entry kept to avoid touching project structure.
+// Real entry is RaceView via SnakeGameApp.
 struct ContentView: View {
-@StateObject private var vm = GameViewModel()
-
 var body: some View {
-    GameView(vm: vm)
+    RaceView()
 }
-}
-
-#Preview {
-ContentView()
 }
