@@ -31,9 +31,9 @@ private let trackWidth: Float = 14.0
 // MARK: - Car state
 private let carNode: SCNNode
 private var position: SIMD2<Float>
-private var heading: Float           // radians, 0 = +x
-private var speed: Float = 0         // m/s, can be negative (reverse)
-private let maxSpeedFwd: Float = 75  // ~270 km/h
+private var heading: Float
+private var speed: Float = 0
+private let maxSpeedFwd: Float = 75
 private let maxSpeedRev: Float = 12
 
 // MARK: - Lap tracking
@@ -44,21 +44,17 @@ private var hasCrossedHalfway: Bool = false
 private let startLine: SIMD2<Float>
 private let halfwayPoint: SIMD2<Float>
 
-// MARK: - Init
 override init() {
     self.scene = SCNScene()
 
-    // Build track waypoints (oval-ish with chicanes)
     var pts: [SIMD2<Float>] = []
     let segments = 96
-    let A: Float = 90   // x radius
-    let B: Float = 55   // z radius
+    let A: Float = 90
+    let B: Float = 55
     for i in 0..<segments {
         let t = Float(i) / Float(segments) * .pi * 2
-        // base ellipse
         var x = A * cos(t)
         var z = B * sin(t)
-        // add a soft chicane bump
         let bump = sin(t * 3.0) * 6.0
         x += bump * 0.2
         z += cos(t * 4.0) * 3.0
@@ -68,16 +64,13 @@ override init() {
     self.startLine = pts[0]
     self.halfwayPoint = pts[segments / 2]
 
-    // Car
     self.carNode = RaceGame.buildCar()
     self.position = pts[0]
-    // heading aligned with tangent to next point
     let next = pts[1]
     let dx = next.x - pts[0].x
     let dz = next.y - pts[0].y
     self.heading = atan2(dz, dx)
 
-    // Camera
     let cam = SCNCamera()
     cam.zFar = 800
     cam.zNear = 0.3
@@ -97,7 +90,6 @@ override init() {
     scene.rootNode.addChildNode(camNode)
 }
 
-// MARK: - Public lifecycle
 func start() {
     sceneView?.delegate = self
     lastTime = 0
@@ -120,9 +112,7 @@ func restart() {
     lapStartTime = 0
 }
 
-// MARK: - Scene building
 private func buildEnvironment() {
-    // Sun
     let sun = SCNLight()
     sun.type = .directional
     sun.intensity = 1100
@@ -143,7 +133,6 @@ private func buildEnvironment() {
     ambientNode.light = ambient
     scene.rootNode.addChildNode(ambientNode)
 
-    // Ground (grass)
     let ground = SCNFloor()
     ground.reflectivity = 0.02
     let groundMat = SCNMaterial()
@@ -154,14 +143,12 @@ private func buildEnvironment() {
     groundNode.position = SCNVector3(0, 0, 0)
     scene.rootNode.addChildNode(groundNode)
 
-    // Sky gradient via background color is set on SCNView, keep here a simple far backdrop
     scene.fogColor = UIColor(red: 0.55, green: 0.78, blue: 1.0, alpha: 1.0)
     scene.fogStartDistance = 220
     scene.fogEndDistance = 600
 }
 
 private func buildTrack() {
-    // Asphalt: a series of overlapping plane segments along the polyline, plus colored kerbs
     let asphaltMat = SCNMaterial()
     asphaltMat.diffuse.contents = UIColor(white: 0.18, alpha: 1)
     asphaltMat.locksAmbientWithDiffuse = true
@@ -172,7 +159,6 @@ private func buildTrack() {
     let redMat = SCNMaterial()
     redMat.diffuse.contents = UIColor.red
 
-    // Place a box segment between every consecutive pair of waypoints
     for i in 0..<trackPoints.count {
         let a = trackPoints[i]
         let b = trackPoints[(i + 1) % trackPoints.count]
@@ -187,7 +173,6 @@ private func buildTrack() {
         segNode.eulerAngles = SCNVector3(0, -ang + .pi / 2, 0)
         scene.rootNode.addChildNode(segNode)
 
-        // kerbs: alternating red/white blocks on both sides
         let kerbColor = (i % 2 == 0) ? redMat : whiteMat
         let leftKerb = SCNBox(width: 1.2, height: 0.12, length: CGFloat(segLen) + 0.2, chamferRadius: 0)
         leftKerb.materials = [kerbColor]
@@ -206,7 +191,6 @@ private func buildTrack() {
         scene.rootNode.addChildNode(rk)
     }
 
-    // Start/finish line
     let line = SCNBox(width: CGFloat(trackWidth), height: 0.06, length: 1.2, chamferRadius: 0)
     let lineMat = SCNMaterial()
     lineMat.diffuse.contents = UIColor.white
@@ -218,7 +202,6 @@ private func buildTrack() {
     lineNode.eulerAngles = SCNVector3(0, -ang + .pi / 2, 0)
     scene.rootNode.addChildNode(lineNode)
 
-    // Decorative grandstands and flag posts at a few points
     let standMat = SCNMaterial()
     standMat.diffuse.contents = UIColor(white: 0.7, alpha: 1)
     for i in stride(from: 0, to: trackPoints.count, by: 16) {
@@ -235,7 +218,6 @@ private func buildTrack() {
         sn.eulerAngles = SCNVector3(0, -dirAng + .pi / 2, 0)
         scene.rootNode.addChildNode(sn)
 
-        // flag
         let pole = SCNCylinder(radius: 0.1, height: 6)
         let poleMat = SCNMaterial()
         poleMat.diffuse.contents = UIColor.darkGray
@@ -257,30 +239,61 @@ private func buildTrack() {
 private static func buildCar() -> SCNNode {
     let car = SCNNode()
 
+    // Burgundy body (per reference)
+    let bodyMat = SCNMaterial()
+    bodyMat.diffuse.contents = UIColor(red: 0.55, green: 0.06, blue: 0.10, alpha: 1)
+    bodyMat.metalness.contents = 0.4
+    bodyMat.roughness.contents = 0.35
+
+    // White accent
+    let whiteMat = SCNMaterial()
+    whiteMat.diffuse.contents = UIColor.white
+    whiteMat.roughness.contents = 0.4
+
+    let blackMat = SCNMaterial()
+    blackMat.diffuse.contents = UIColor.black
+
     // body
     let body = SCNBox(width: 1.0, height: 0.3, length: 3.6, chamferRadius: 0.15)
-    let bodyMat = SCNMaterial()
-    bodyMat.diffuse.contents = UIColor(red: 0.85, green: 0.05, blue: 0.05, alpha: 1) // Ferrari red
     body.materials = [bodyMat]
     let bodyNode = SCNNode(geometry: body)
     bodyNode.position = SCNVector3(0, 0.4, 0)
     car.addChildNode(bodyNode)
 
+    // sidepod white stripe
+    let stripe = SCNBox(width: 1.02, height: 0.04, length: 1.6, chamferRadius: 0.02)
+    stripe.materials = [whiteMat]
+    let stripeNode = SCNNode(geometry: stripe)
+    stripeNode.position = SCNVector3(0, 0.55, 0.4)
+    car.addChildNode(stripeNode)
+
     // cockpit
     let cockpit = SCNBox(width: 0.55, height: 0.3, length: 0.9, chamferRadius: 0.18)
-    let cockpitMat = SCNMaterial()
-    cockpitMat.diffuse.contents = UIColor.black
-    cockpit.materials = [cockpitMat]
+    cockpit.materials = [blackMat]
     let cockpitNode = SCNNode(geometry: cockpit)
     cockpitNode.position = SCNVector3(0, 0.7, 0.1)
     car.addChildNode(cockpitNode)
 
-    // nose
+    // driver helmet (white sphere)
+    let helmet = SCNSphere(radius: 0.18)
+    helmet.materials = [whiteMat]
+    let helmetNode = SCNNode(geometry: helmet)
+    helmetNode.position = SCNVector3(0, 0.95, 0.05)
+    car.addChildNode(helmetNode)
+
+    // nose (burgundy)
     let nose = SCNBox(width: 0.45, height: 0.18, length: 1.2, chamferRadius: 0.1)
     nose.materials = [bodyMat]
     let noseNode = SCNNode(geometry: nose)
     noseNode.position = SCNVector3(0, 0.32, -2.0)
     car.addChildNode(noseNode)
+
+    // nose tip (white)
+    let noseTip = SCNBox(width: 0.4, height: 0.16, length: 0.35, chamferRadius: 0.08)
+    noseTip.materials = [whiteMat]
+    let noseTipNode = SCNNode(geometry: noseTip)
+    noseTipNode.position = SCNVector3(0, 0.32, -2.65)
+    car.addChildNode(noseTipNode)
 
     // front wing
     let frontWing = SCNBox(width: 2.0, height: 0.06, length: 0.5, chamferRadius: 0.02)
@@ -290,21 +303,30 @@ private static func buildCar() -> SCNNode {
     car.addChildNode(frontWingNode)
 
     // rear wing
-    let rearWingMat = SCNMaterial()
-    rearWingMat.diffuse.contents = UIColor.black
     let rearWingMain = SCNBox(width: 1.6, height: 0.05, length: 0.35, chamferRadius: 0.02)
-    rearWingMain.materials = [rearWingMat]
+    rearWingMain.materials = [bodyMat]
     let rearWingNode = SCNNode(geometry: rearWingMain)
     rearWingNode.position = SCNVector3(0, 0.95, 1.7)
     car.addChildNode(rearWingNode)
 
-    let rearWingSupL = SCNBox(width: 0.05, height: 0.55, length: 0.1, chamferRadius: 0)
-    rearWingSupL.materials = [rearWingMat]
-    let supL = SCNNode(geometry: rearWingSupL)
-    supL.position = SCNVector3(-0.4, 0.7, 1.7)
+    // rear wing endplates (white)
+    let endplate = SCNBox(width: 0.05, height: 0.55, length: 0.3, chamferRadius: 0.02)
+    endplate.materials = [whiteMat]
+    let epL = SCNNode(geometry: endplate)
+    epL.position = SCNVector3(-0.8, 0.72, 1.7)
+    car.addChildNode(epL)
+    let epR = SCNNode(geometry: endplate.copy() as! SCNGeometry)
+    epR.position = SCNVector3(0.8, 0.72, 1.7)
+    car.addChildNode(epR)
+
+    // rear wing supports
+    let support = SCNBox(width: 0.05, height: 0.55, length: 0.1, chamferRadius: 0)
+    support.materials = [blackMat]
+    let supL = SCNNode(geometry: support)
+    supL.position = SCNVector3(-0.35, 0.7, 1.7)
     car.addChildNode(supL)
-    let supR = SCNNode(geometry: rearWingSupL.copy() as! SCNGeometry)
-    supR.position = SCNVector3(0.4, 0.7, 1.7)
+    let supR = SCNNode(geometry: support.copy() as! SCNGeometry)
+    supR.position = SCNVector3(0.35, 0.7, 1.7)
     car.addChildNode(supR)
 
     // wheels
@@ -326,7 +348,6 @@ private static func buildCar() -> SCNNode {
     return car
 }
 
-// MARK: - Render loop
 func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
     if lastTime == 0 {
         lastTime = time
@@ -340,12 +361,10 @@ func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
         elapsed = time - raceStartTime
     }
 
-    // Inputs
     let throttle: Float = throttlePressed ? 1.0 : 0.0
     let brake: Float = brakingPressed ? 1.0 : 0.0
     let steer: Float = (steerLeftPressed ? -1 : 0) + (steerRightPressed ? 1 : 0)
 
-    // Longitudinal
     let engineAccel: Float = 18.0
     let brakeAccel: Float = 28.0
     let drag: Float = 0.45
@@ -355,12 +374,10 @@ func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
         speed += throttle * engineAccel * dt
         speed -= brake * brakeAccel * dt * (speed > 0 ? 1 : -1)
 
-        // Reverse when braking from standstill
         if speed > -maxSpeedRev && brake > 0 && speed < 0.5 && throttle == 0 {
             speed -= brakeAccel * 0.5 * dt
         }
 
-        // Drag + rolling
         speed -= drag * speed * abs(speed) / max(maxSpeedFwd, 1) * dt * 8
         if abs(speed) > 0.01 {
             speed -= rollingResistance * (speed > 0 ? 1 : -1) * dt
@@ -370,35 +387,29 @@ func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
 
         speed = min(max(speed, -maxSpeedRev), maxSpeedFwd)
 
-        // Lateral
         let steerSpeedFactor = max(0.25, min(1.0, abs(speed) / 25))
         let turnRate: Float = 1.9 * steer * steerSpeedFactor
         heading += turnRate * dt * (speed >= 0 ? 1 : -1)
 
-        // Move
         let dx = cos(heading) * speed * dt
         let dz = sin(heading) * speed * dt
         position.x += dx
         position.y += dz
 
-        // Off-track penalty
         let (onTrack, _) = trackInfo(at: position)
         if !onTrack {
-            speed *= 0.965 // grass slows the car
+            speed *= 0.965
         }
     }
 
-    // Apply transform
     carNode.position = SCNVector3(position.x, 0.4, position.y)
     carNode.eulerAngles = SCNVector3(0, -heading + .pi / 2, 0)
 
-    // Camera: chase from behind & above
     let camDist: Float = 8.0
     let camHeight: Float = 3.5
     let camX = position.x - cos(heading) * camDist
     let camZ = position.y - sin(heading) * camDist
     let targetCamPos = SCNVector3(camX, camHeight, camZ)
-    // smooth
     let cp = cameraNode.position
     let smooth: Float = 0.15
     cameraNode.position = SCNVector3(
@@ -409,14 +420,12 @@ func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
     let lookAt = SCNVector3(position.x + cos(heading) * 4, 0.8, position.y + sin(heading) * 4)
     cameraNode.look(at: lookAt, up: SCNVector3(0, 1, 0), localFront: SCNVector3(0, 0, -1))
 
-    // Lap detection
     let toHalf = simd_distance(position, halfwayPoint)
     let toStart = simd_distance(position, startLine)
     if !hasCrossedHalfway && toHalf < 8 {
         hasCrossedHalfway = true
     }
     if hasCrossedHalfway && toStart < 6 {
-        // completed a lap
         let lapTime = time - lapStartTime
         if bestLap == nil || lapTime < (bestLap ?? .infinity) {
             bestLap = lapTime
@@ -430,14 +439,12 @@ func renderer(_ renderer: SCNSceneRenderer, updateAtTime time: TimeInterval) {
         }
     }
 
-    // Publish HUD on main thread
     let kmh = max(0, Double(speed)) * 3.6
     DispatchQueue.main.async {
         self.speedKmh = kmh
     }
 }
 
-// Sample whether a point is within the track polyline (approximate)
 private func trackInfo(at p: SIMD2<Float>) -> (onTrack: Bool, segmentIndex: Int) {
     var minD: Float = .infinity
     var idx = 0
